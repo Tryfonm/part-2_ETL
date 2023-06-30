@@ -1,0 +1,68 @@
+version: "3"
+
+networks:
+  spark-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.9.0.0/16
+
+services:
+
+  spark-master:
+    image: tryfonm/spark-node
+    ports:
+      - 4040:4040
+      - 8080:8080
+      - 7077:7077
+      - 6066:6066
+    volumes:
+       - ./src:/opt/spark-jobs
+       - ./output:/opt/spark-output
+    environment:
+      - SPARK_MASTER=spark://172.9.0.2:7077
+      - SPARK_LOCAL_IP=172.9.0.2
+      - SPARK_WORKLOAD=master
+    networks:
+      spark-network:
+        ipv4_address: 172.9.0.2
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master --ip 172.9.0.2 --port 7077 --webui-port 8080
+
+
+  spark-worker:
+    image: tryfonm/spark-node
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_MASTER=spark://172.9.0.2:7077  # Change the ip to spark-master
+      - SPARK_WORKER_CORES=1
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_DRIVER_MEMORY=1G
+      - SPARK_EXECUTOR_MEMORY=1G
+      - SPARK_WORKLOAD=worker
+    volumes:
+       - ./src:/opt/spark-jobs
+       - ./output:/opt/spark-output
+    networks:
+      spark-network:
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://172.9.0.2:7077 --webui-port 8080
+
+  spark-client:
+    image: tryfonm/spark-node
+    depends_on:
+      - spark-master
+      - spark-worker
+    environment:
+      - SPARK_MASTER=spark://172.9.0.2:7077
+      - SPARK_WORKER_CORES=1
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_DRIVER_MEMORY=1G
+      - SPARK_EXECUTOR_MEMORY=1G
+      - SPARK_WORKLOAD=submit
+    volumes:
+       - ./src:/opt/spark-jobs
+       - ./output:/opt/spark-output
+    networks:
+      spark-network:
+    command: /opt/spark/bin/spark-submit --master spark://172.9.0.2:7077 /opt/spark-jobs/job_2/main.py
